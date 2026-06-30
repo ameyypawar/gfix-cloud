@@ -1,14 +1,34 @@
-# docker-compose.yml — STUB (fleshed out in Phase 6)
+# docker-compose.yml
 #
-# Phase 6 will wire up:
-#   pgvector  — pgvector/pgvector:pg16
-#   api       — FastAPI service (api/Dockerfile, 3-stage, downloads gfix binary)
-#   web       — Next.js dashboard (web/Dockerfile, standalone)
-#   seed      — one-shot idempotent golden-set loader (api/app/seed.py)
+# Phase 2: real db service added.
+# Phase 6 will wire up the api + web services + seed.
 #
-# For now, run services independently:
-#   api: cd api && uvicorn app.main:app --reload --port 8080
-#   web: cd web && npm run dev
-#   db:  docker run -e POSTGRES_PASSWORD=postgres -p 5432:5432 pgvector/pgvector:pg16
+# Quick start (db only):
+#   docker compose up -d db
+#
+# Then run the API locally:
+#   cd api && DATABASE_URL=postgresql://postgres:postgres@localhost:5432/gfixcloud \
+#            uvicorn app.main:app --port 8080
 
-services: {}
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: gfixcloud
+      POSTGRES_USER: postgres
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "gfixcloud"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  # api and web stubs — see Phase 6 for Dockerfiles
+  # api:
+  #   build: ./api
+  #   ...
+  # web:
+  #   build: ./web
+  #   ...
