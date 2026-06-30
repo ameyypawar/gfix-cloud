@@ -1,0 +1,14 @@
+# docker-compose.yml — STUB (fleshed out in Phase 6)
+#
+# Phase 6 will wire up:
+#   pgvector  — pgvector/pgvector:pg16
+#   api       — FastAPI service (api/Dockerfile, 3-stage, downloads gfix binary)
+#   web       — Next.js dashboard (web/Dockerfile, standalone)
+#   seed      — one-shot idempotent golden-set loader (api/app/seed.py)
+#
+# For now, run services independently:
+#   api: cd api && uvicorn app.main:app --reload --port 8080
+#   web: cd web && npm run dev
+#   db:  docker run -e POSTGRES_PASSWORD=postgres -p 5432:5432 pgvector/pgvector:pg16
+
+services: {}
