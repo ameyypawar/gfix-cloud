@@ -1,11 +1,10 @@
 """
-gfix MCP bridge — Phase 1 (no RAG).
+gfix MCP bridge.
 
 Flow per request:
   materialize scratch repo → spawn gfix mcp → merge_preview → conflict_get
-  → deterministic floor (mergiraf / ours placeholder) → merge_apply → read resolved file
-
-Phase 3 will replace the Ours placeholder with a RAG-augmented LLM suggestion.
+  → deterministic floor (mergiraf) → if mergiraf fails: RAG-augmented LLM suggestion
+  → merge_apply → read resolved file
 """
 import json
 import logging
@@ -19,7 +18,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.shared.exceptions import McpError
 
-from app.models import ConflictDetail, ConflictSide, ResolveResponse, TargetSide
+from app.models import ConflictDetail, ConflictSide, ResolveResponse, RetrievedNeighbor, TargetSide
 
 logger = logging.getLogger(__name__)
 
@@ -91,13 +90,22 @@ async def resolve_conflict(
     ours: str,
     theirs: str,
     file_path: str,
+    pool=None,
+    use_rag: bool = True,
 ) -> ResolveResponse:
     """Drive the real gfix MCP server end-to-end and return a ResolveResponse.
 
     GITFIX_ALLOW_ANY_REPO=1 is mandatory: scratch repos live in the system
     tempdir, outside the server's startup CWD, and gfix's workspace fence
     rejects them otherwise.
+
+    When mergiraf fails for a conflict, falls back to RAG-augmented LLM
+    generation (produce_suggestion).  use_rag=False sends no examples to
+    the LLM, giving the baseline for eval.
     """
+    # Deferred import to avoid circular issues and keep top-level import clean
+    from app.rag import produce_suggestion
+
     with tempfile.TemporaryDirectory() as tmpdir:
         _materialize_scratch_repo(tmpdir, file_path, base, ours, theirs)
 
@@ -135,6 +143,10 @@ async def resolve_conflict(
 
                 conflict_detail: Optional[ConflictDetail] = None
                 via: str = "git_automerge"
+                ai_rationale: Optional[str] = None
+                ai_confidence: Optional[float] = None
+                suggestion_neighbors: list = []
+                used_llm = False
 
                 # ── 2. Per-conflict: get → resolve ────────────────────────
                 for entry in unresolved:
@@ -184,22 +196,36 @@ async def resolve_conflict(
                         via = res_j.get("via", "mergiraf")
                         logger.info("conflict %s resolved via mergiraf", conflict_id)
                     except (McpError, ValueError):
-                        # TODO Phase 3: replace placeholder with RAG-augmented suggestion
+                        # Mergiraf cannot resolve this conflict — call the LLM
                         logger.info(
-                            "mergiraf failed for %s — Phase-1 placeholder: ours",
+                            "mergiraf failed for %s — calling RAG+LLM (use_rag=%s)",
                             conflict_id,
+                            use_rag,
                         )
+                        suggestion, neighbors = await produce_suggestion(
+                            pool=pool,
+                            conflict=conflict_detail,
+                            use_rag=use_rag,
+                        )
+                        ai_rationale = suggestion.rationale
+                        ai_confidence = suggestion.confidence
+                        suggestion_neighbors = neighbors
+                        used_llm = True
+
                         res2 = await session.call_tool(
                             "gitfix_conflict_resolve",
                             {
                                 "repo_path": tmpdir,
                                 "merge_id": merge_id,
                                 "conflict_id": conflict_id,
-                                "resolution": {"kind": "ours"},
+                                "resolution": {
+                                    "kind": "manual",
+                                    "text": suggestion.text,
+                                },
                             },
                         )
                         res2_j: dict = json.loads(res2.content[0].text)
-                        via = res2_j.get("via", "ours_chosen")
+                        via = res2_j.get("via", "manual")
 
                 # ── 3. merge_apply ────────────────────────────────────────
                 apply_result = await session.call_tool(
@@ -234,6 +260,18 @@ async def resolve_conflict(
                         target=TargetSide(content=ours, oid="", exists=True),
                     )
 
+                # Map internal Neighbor list → public RetrievedNeighbor list
+                public_neighbors = [
+                    RetrievedNeighbor(
+                        file_path=n.file_path,
+                        language=n.language,
+                        resolution_kind=n.resolution_kind,
+                        similarity=n.rrf_score,
+                        resolved_content_preview=n.resolved_content[:200],
+                    )
+                    for n in suggestion_neighbors
+                ]
+
                 return ResolveResponse(
                     merge_id=merge_id,
                     file_path=file_path,
@@ -241,4 +279,8 @@ async def resolve_conflict(
                     via=via,
                     audit_ref=audit_ref,
                     conflict=conflict_detail,
+                    used_rag=used_llm and use_rag,
+                    neighbors=public_neighbors,
+                    ai_rationale=ai_rationale,
+                    ai_confidence=ai_confidence,
                 )

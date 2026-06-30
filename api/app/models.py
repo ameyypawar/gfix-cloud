@@ -8,6 +8,7 @@ class ResolveRequest(BaseModel):
     ours: str
     theirs: str
     file_path: str
+    rag: bool = True
 
 
 class ConflictSide(BaseModel):
@@ -49,6 +50,14 @@ class ConflictDetail(BaseModel):
     target: TargetSide
 
 
+class RetrievedNeighbor(BaseModel):
+    file_path: str
+    language: str
+    resolution_kind: str
+    similarity: float
+    resolved_content_preview: str
+
+
 class ResolveResponse(BaseModel):
     merge_id: str
     file_path: str
@@ -56,3 +65,7 @@ class ResolveResponse(BaseModel):
     via: str
     audit_ref: Optional[str] = None
     conflict: ConflictDetail
+    used_rag: bool = False
+    neighbors: list[RetrievedNeighbor] = []
+    ai_rationale: Optional[str] = None
+    ai_confidence: Optional[float] = None

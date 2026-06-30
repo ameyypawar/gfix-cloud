@@ -57,6 +57,8 @@ async def resolve(req: ResolveRequest) -> ResolveResponse:
             ours=req.ours,
             theirs=req.theirs,
             file_path=req.file_path,
+            pool=_pool,
+            use_rag=req.rag,
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -88,6 +90,7 @@ async def resolve(req: ResolveRequest) -> ResolveResponse:
                 ours_oid=response.conflict.ours.oid,
                 theirs_oid=response.conflict.theirs.oid,
             )
+            ai_model = settings.generation_model if response.ai_rationale else None
             record = {
                 "merge_id": response.merge_id,
                 "file_path": req.file_path,
@@ -98,10 +101,10 @@ async def resolve(req: ResolveRequest) -> ResolveResponse:
                 "ours_code": response.conflict.ours.content,
                 "theirs_code": response.conflict.theirs.content,
                 "resolved_content": response.resolved_content,
-                "ai_model": None,
-                "ai_confidence": None,
-                "ai_rationale": None,
-                "used_rag": False,
+                "ai_model": ai_model,
+                "ai_confidence": response.ai_confidence,
+                "ai_rationale": response.ai_rationale,
+                "used_rag": response.used_rag,
                 "base_oid": response.conflict.base.oid,
                 "ours_oid": response.conflict.ours.oid,
                 "theirs_oid": response.conflict.theirs.oid,

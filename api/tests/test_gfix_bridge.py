@@ -145,17 +145,25 @@ def test_conflict_detail_construction():
     assert detail.target.exists is True
 
 
-# ── Integration tests: requires gfix on PATH ─────────────────────────────────
+# ── Integration tests: requires gfix on PATH + ANTHROPIC_API_KEY ─────────────
 
 SAMPLE_DIR = Path(__file__).parent.parent / "sample_conflicts"
+
+import os as _os
 
 gfix_present = pytest.mark.skipif(
     shutil.which("gfix") is None,
     reason="gfix not on PATH",
 )
 
+# Phase 3: mergiraf failures now call the LLM; integration tests need a key.
+_llm_and_gfix_present = pytest.mark.skipif(
+    shutil.which("gfix") is None or not _os.environ.get("ANTHROPIC_API_KEY"),
+    reason="gfix not on PATH or ANTHROPIC_API_KEY not set",
+)
 
-@gfix_present
+
+@_llm_and_gfix_present
 async def test_resolve_overlap_python_end_to_end():
     """Overlap fixture: both sides change same line → mergiraf fails → ours placeholder."""
     with open(SAMPLE_DIR / "overlap_python.json") as f:
@@ -175,7 +183,7 @@ async def test_resolve_overlap_python_end_to_end():
     assert response.via in {"mergiraf", "mergiraf_chosen", "ours_chosen", "ours_placeholder"}
 
 
-@gfix_present
+@_llm_and_gfix_present
 async def test_resolve_simple_python_end_to_end():
     """Non-overlapping additions: git/mergiraf should auto-merge or resolve cleanly."""
     with open(SAMPLE_DIR / "simple_python.json") as f:
