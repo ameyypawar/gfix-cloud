@@ -1,0 +1,6 @@
+{
+  "base": "def hello():\n    print(\"hello\")\n\n\ndef greet(name: str) -> str:\n    return f\"Hello, {name}\"\n",
+  "ours": "def hello():\n    print(\"hello\")\n\n\ndef greet(name: str) -> str:\n    return f\"Hello, {name}\"\n\n\ndef farewell(name: str) -> str:\n    return f\"Goodbye, {name}\"\n",
+  "theirs": "def hello():\n    print(\"hello\")\n\n\ndef greet(name: str) -> str:\n    return f\"Hello, {name}\"\n\n\ndef welcome(name: str) -> str:\n    return f\"Welcome, {name}!\"\n",
+  "file_path": "greeting.py"
+}
