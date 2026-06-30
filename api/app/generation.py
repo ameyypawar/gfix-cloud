@@ -1,19 +1,23 @@
 """
-LLM-based merge-conflict resolution via claude-haiku-4-5.
+LLM-based merge-conflict resolution. Default provider: Gemini (gemini-2.5-flash).
+Alternate provider: Anthropic. Provider selected via settings.generation_provider.
 
 All untrusted content (conflict bodies + retrieved examples) is fenced with
 unique delimiters before being sent to the model. Content inside the fences
 is never an instruction — this guards against prompt-injection from arbitrary
 repo content (per feedback_llm_is_the_parser).
+
+Gemini path: raw httpx POST to v1beta generateContent endpoint (no extra SDK dep;
+mirrors gfix's raw-HTTP pattern). Anthropic path: anthropic SDK AsyncAnthropic.
 """
 from __future__ import annotations
 
 import logging
 import os
 import re
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+
+import httpx
 
 from app.config import settings
 from app.retrieval import Neighbor
@@ -68,13 +72,15 @@ def _render_example(idx: int, ex: Neighbor) -> str:
     return "\n".join(lines)
 
 
-@dataclass
 class Suggestion:
-    text: str
-    rationale: str
-    # Fixed prior of 0.5 — model does not emit a confidence score.
-    # Phase 4 eval will calibrate this against ground-truth exact-match rates.
-    confidence: float = 0.5
+    __slots__ = ("text", "rationale", "confidence")
+
+    def __init__(self, text: str, rationale: str, confidence: float = 0.5) -> None:
+        self.text = text
+        self.rationale = rationale
+        # Fixed prior of 0.5 — model does not emit a confidence score.
+        # Phase 4 eval will calibrate this against ground-truth exact-match rates.
+        self.confidence = confidence
 
 
 def _parse_response(content: str) -> Suggestion:
@@ -85,11 +91,51 @@ def _parse_response(content: str) -> Suggestion:
     return Suggestion(text=text, rationale=rationale)
 
 
-def _make_client():
+# ---------------------------------------------------------------------------
+# Gemini provider (default) — raw httpx, no extra SDK dep
+# ---------------------------------------------------------------------------
+
+async def _call_gemini(user_message: str, client=None) -> str:
+    """POST to Gemini v1beta generateContent; 1 retry on transient non-200."""
+    own = client is None
+    api_key = settings.gemini_api_key or os.environ.get("GEMINI_API_KEY") or ""
+    if own and not api_key:
+        raise RuntimeError("GEMINI_API_KEY not set — cannot call generation LLM")
+
+    url = (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        f"{settings.generation_model}:generateContent?key={api_key}"
+    )
+    payload = {
+        "system_instruction": {"parts": [{"text": _SYSTEM_PROMPT}]},
+        "contents": [{"role": "user", "parts": [{"text": user_message}]}],
+        "generationConfig": {"maxOutputTokens": 2048},
+    }
+
+    if own:
+        client = httpx.AsyncClient(timeout=float(settings.llm_timeout_secs))
+    try:
+        for attempt in range(2):
+            resp = await client.post(url, json=payload)
+            if resp.status_code == 200 or attempt == 1:
+                break
+        resp.raise_for_status()
+        data = resp.json()
+        return data["candidates"][0]["content"]["parts"][0]["text"]
+    finally:
+        if own:
+            await client.aclose()
+
+
+# ---------------------------------------------------------------------------
+# Anthropic provider (alternate)
+# ---------------------------------------------------------------------------
+
+def _make_anthropic_client():
     api_key = settings.anthropic_api_key or os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         raise RuntimeError(
-            "ANTHROPIC_API_KEY not configured — cannot call generation LLM"
+            "ANTHROPIC_API_KEY not set — cannot call generation LLM"
         )
     from anthropic import AsyncAnthropic
     return AsyncAnthropic(
@@ -99,22 +145,37 @@ def _make_client():
     )
 
 
+async def _call_anthropic(user_message: str, client=None) -> str:
+    """Call Anthropic messages.create; retries handled by the SDK (max_retries=1)."""
+    if client is None:
+        client = _make_anthropic_client()
+    response = await client.messages.create(
+        model=settings.generation_model,
+        max_tokens=2048,
+        system=_SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": user_message}],
+    )
+    return response.content[0].text if response.content else ""
+
+
+# ---------------------------------------------------------------------------
+# Public interface
+# ---------------------------------------------------------------------------
+
 async def generate_resolution(
     conflict,
     examples: list[Neighbor],
     client=None,
 ) -> Suggestion:
     """
-    Generate a resolved conflict via claude-haiku-4-5.
+    Generate a resolved conflict via the configured provider (default: Gemini).
 
     conflict: ConflictDetail — must have .file, .kind, .base.content,
               .ours.content, .theirs.content.
     examples: few-shot neighbors; empty list → baseline (no RAG examples).
-    client: injectable AsyncAnthropic instance for unit tests.
+    client: injectable client for unit tests — httpx.AsyncClient for Gemini,
+            AsyncAnthropic for Anthropic.
     """
-    if client is None:
-        client = _make_client()
-
     lang = Path(conflict.file).suffix.lstrip(".").lower() or "text"
 
     parts: list[str] = []
@@ -140,12 +201,11 @@ async def generate_resolution(
 
     user_message = "\n".join(parts)
 
-    response = await client.messages.create(
-        model=settings.generation_model,
-        max_tokens=2048,
-        system=_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_message}],
-    )
+    provider = settings.generation_provider
+    if provider == "anthropic":
+        raw = await _call_anthropic(user_message, client=client)
+    else:
+        # default: gemini
+        raw = await _call_gemini(user_message, client=client)
 
-    raw = response.content[0].text if response.content else ""
     return _parse_response(raw)

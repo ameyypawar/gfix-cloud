@@ -7,9 +7,11 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "postgresql://postgres:postgres@localhost:5432/gfixcloud"
 
-    # LLM generation
-    anthropic_api_key: str = ""
-    generation_model: str = "claude-haiku-4-5"
+    # LLM generation — default provider: Gemini (pluggable)
+    generation_provider: str = "gemini"
+    gemini_api_key: str = ""
+    anthropic_api_key: str = ""        # alternate provider
+    generation_model: str = "gemini-2.5-flash"
     llm_timeout_secs: int = 30
 
     # Embeddings

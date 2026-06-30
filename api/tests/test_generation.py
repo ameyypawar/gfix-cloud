@@ -1,8 +1,8 @@
 """
-Phase 3 generation tests.
+Phase 4.5 generation tests — updated for Gemini provider (default).
 
-Unit tests use a MOCKED anthropic client — no API key required.
-Live smoke test is gated on ANTHROPIC_API_KEY and skips cleanly when absent.
+Unit tests use a MOCKED httpx client (Gemini path) — no API key required.
+Live smoke test is gated on GEMINI_API_KEY and skips cleanly when absent.
 
 Assertions:
   - Few-shot examples appear in the user message when provided
@@ -11,8 +11,6 @@ Assertions:
   - Response parses into a Suggestion with non-empty text
 """
 import os
-from dataclasses import dataclass
-from typing import Optional
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -65,12 +63,29 @@ def _make_neighbor(
 
 
 def _make_mock_client(response_text: str):
-    """Return an injectable mock AsyncAnthropic client."""
-    msg = MagicMock()
-    msg.content = [MagicMock(text=response_text)]
+    """Return an injectable mock httpx.AsyncClient for the Gemini path.
+
+    Mirrors the shape generate_resolution expects:
+      client.post(url, json=payload) → Response with .status_code and .json()
+    """
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "candidates": [
+            {"content": {"parts": [{"text": response_text}], "role": "model"}}
+        ]
+    }
+    mock_resp.raise_for_status = MagicMock()
+
     mock = MagicMock()
-    mock.messages.create = AsyncMock(return_value=msg)
+    mock.post = AsyncMock(return_value=mock_resp)
     return mock
+
+
+def _extract_user_content(mock_client) -> str:
+    """Pull the user message text out of the captured Gemini POST payload."""
+    call_kwargs = mock_client.post.call_args.kwargs
+    return call_kwargs["json"]["contents"][0]["parts"][0]["text"]
 
 
 _GOOD_RESPONSE = (
@@ -96,7 +111,7 @@ def test_parse_response_fallback_when_no_markers():
     assert s.confidence == 0.5
 
 
-# ── Unit: generate_resolution with mock client ───────────────────────────────
+# ── Unit: generate_resolution with mock Gemini client ────────────────────────
 
 async def test_generate_with_examples_includes_example_content():
     """Few-shot block appears in the user message when examples are provided."""
@@ -106,10 +121,7 @@ async def test_generate_with_examples_includes_example_content():
 
     await generate_resolution(conflict, [neighbor], client=mock_client)
 
-    # Capture what was sent to the model
-    call_kwargs = mock_client.messages.create.call_args.kwargs
-    messages = call_kwargs["messages"]
-    user_content = messages[0]["content"]
+    user_content = _extract_user_content(mock_client)
 
     assert "Example 1" in user_content, "few-shot block must be present"
     assert neighbor.file_path in user_content
@@ -123,9 +135,7 @@ async def test_generate_without_examples_omits_few_shot_block():
 
     await generate_resolution(conflict, [], client=mock_client)
 
-    call_kwargs = mock_client.messages.create.call_args.kwargs
-    messages = call_kwargs["messages"]
-    user_content = messages[0]["content"]
+    user_content = _extract_user_content(mock_client)
 
     assert "Example" not in user_content, "no few-shot block when examples=[]"
     assert "Few-shot" not in user_content
@@ -139,9 +149,7 @@ async def test_conflict_bodies_are_fenced():
 
     await generate_resolution(conflict, [], client=mock_client)
 
-    call_kwargs = mock_client.messages.create.call_args.kwargs
-    messages = call_kwargs["messages"]
-    user_content = messages[0]["content"]
+    user_content = _extract_user_content(mock_client)
 
     assert _FENCE_OPEN in user_content, "data fence open must appear in user message"
     assert _FENCE_CLOSE in user_content, "data fence close must appear in user message"
@@ -172,9 +180,7 @@ async def test_example_code_is_also_fenced():
 
     await generate_resolution(conflict, [neighbor], client=mock_client)
 
-    call_kwargs = mock_client.messages.create.call_args.kwargs
-    messages = call_kwargs["messages"]
-    user_content = messages[0]["content"]
+    user_content = _extract_user_content(mock_client)
 
     # Find all fenced regions
     fenced_contents = []
@@ -205,7 +211,7 @@ async def test_response_parses_into_suggestion():
 
 
 async def test_model_and_params_sent_correctly():
-    """Verify model name, max_tokens, and that 'effort' is NOT passed."""
+    """Verify model name in URL and maxOutputTokens in generationConfig."""
     from app.config import settings
 
     conflict = _make_conflict()
@@ -213,23 +219,27 @@ async def test_model_and_params_sent_correctly():
 
     await generate_resolution(conflict, [], client=mock_client)
 
-    call_kwargs = mock_client.messages.create.call_args.kwargs
-    assert call_kwargs["model"] == settings.generation_model
-    assert call_kwargs["max_tokens"] == 2048
-    assert "effort" not in call_kwargs, "Haiku 4.5 rejects 'effort' param"
-    assert "thinking" not in call_kwargs, "no extended thinking"
+    call_args = mock_client.post.call_args
+    url = call_args.args[0]
+    payload = call_args.kwargs["json"]
+
+    assert settings.generation_model in url, "model must appear in Gemini URL"
+    assert payload["generationConfig"]["maxOutputTokens"] == 2048
+    # No Anthropic-specific keys leak into the Gemini payload
+    assert "effort" not in payload
+    assert "thinking" not in payload
 
 
-# ── Live smoke test: gated on ANTHROPIC_API_KEY ──────────────────────────────
+# ── Live smoke test: gated on GEMINI_API_KEY ─────────────────────────────────
 
 @pytest.mark.skipif(
-    not os.environ.get("ANTHROPIC_API_KEY"),
-    reason="ANTHROPIC_API_KEY not set — live generation skipped",
+    not os.environ.get("GEMINI_API_KEY"),
+    reason="GEMINI_API_KEY not set — live generation skipped",
 )
 async def test_live_generation_smoke():
     """
-    End-to-end live call to claude-haiku-4-5.
-    Only runs when ANTHROPIC_API_KEY is set.
+    End-to-end live call to gemini-2.5-flash.
+    Only runs when GEMINI_API_KEY is set.
     """
     conflict = _make_conflict(
         base="fn add(a: i32, b: i32) -> i32 { a }",

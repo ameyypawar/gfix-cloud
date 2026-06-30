@@ -1,61 +1,62 @@
 {
+  "generated_at": "2026-06-30T11:58:28.571107+00:00",
+  "provider": "gemini",
+  "model": "gemini-2.5-flash",
   "golden_set_size": 50,
   "rag_top_k": 3,
-  "retrieval": {
-    "mean_context_precision": 0.1,
-    "threshold": 0.7,
-    "per_row": [
-      0.0,
-      0.0,
-      0.0,
-      0.0,
-      0.3333333333333333,
-      0.0,
-      0.0,
-      0.3333333333333333,
-      0.0,
-      0.0,
-      0.0,
-      0.0,
-      0.0,
-      0.0,
-      0.0,
-      0.0,
-      0.0,
-      0.0,
-      0.0,
-      0.0,
-      0.0,
-      0.0,
-      0.3333333333333333,
-      0.3333333333333333,
-      0.0,
-      0.0,
-      0.0,
-      0.0,
-      0.0,
-      0.0,
-      0.0,
-      0.0,
-      0.0,
-      0.3333333333333333,
-      0.3333333333333333,
-      0.0,
-      0.0,
-      0.3333333333333333,
-      0.3333333333333333,
-      0.6666666666666666,
-      0.0,
-      0.0,
-      0.3333333333333333,
-      0.3333333333333333,
-      0.0,
-      0.0,
-      0.0,
-      0.3333333333333333,
-      0.3333333333333333,
-      0.3333333333333333
-    ]
+  "per_family_counts": {
+    "Cargo.toml": 21,
+    "mod.rs": 5,
+    "OutlineTree.module.css": 2,
+    "WorkspaceItemRow.tsx": 2,
+    "lib.rs": 2,
+    "SKILL.md": 1,
+    "ipc.ts": 1,
+    "WorkspaceItemRow.module.css": 1,
+    "upstreamIntegrationService.svelte.ts": 1,
+    "mode.rs": 1,
+    "from_env.rs": 1,
+    "incubate.rs": 1,
+    "overrides.rs": 1,
+    "index.rs": 1,
+    "checkout.rs": 1,
+    "access.rs": 1,
+    "parse.rs": 1,
+    "transport.rs": 1,
+    "receive_pack.rs": 1,
+    "fetch.rs": 1,
+    "read.rs": 1,
+    "init.rs": 1,
+    "revision.rs": 1
   },
-  "generation": null
+  "buckets": {
+    "recurring": {
+      "rows": 26,
+      "families": [
+        "Cargo.toml",
+        "mod.rs"
+      ],
+      "retrieval": {
+        "mean_context_precision": 0.16666666666666666,
+        "threshold": 0.7
+      },
+      "generation": "pending-key"
+    },
+    "one_off": {
+      "rows": 24,
+      "retrieval": {
+        "mean_context_precision": 0.027777777777777776,
+        "threshold": 0.7
+      },
+      "generation": "pending-key"
+    },
+    "overall": {
+      "rows": 50,
+      "retrieval": {
+        "mean_context_precision": 0.1,
+        "threshold": 0.7
+      },
+      "generation": "pending-key"
+    }
+  }
 }
