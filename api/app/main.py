@@ -1,5 +1,7 @@
+import json
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException
@@ -17,6 +19,9 @@ logger = logging.getLogger(__name__)
 
 # Module-level pool reference — set during lifespan
 _pool = None
+
+# Path to eval/summary.json relative to the repo root (two levels above api/app/)
+_EVAL_SUMMARY_PATH = Path(__file__).parent.parent.parent / "eval" / "summary.json"
 
 
 @asynccontextmanager
@@ -118,6 +123,23 @@ async def resolve(req: ResolveRequest) -> ResolveResponse:
             logger.exception("persistence failed (non-fatal): %s", persist_exc)
 
     return response
+
+
+# ── Eval summary ─────────────────────────────────────────────────────────────
+
+@app.get("/eval/summary")
+async def eval_summary() -> dict:
+    """Return eval/summary.json produced by eval/run_eval.py.
+
+    Returns {"status": "no eval run yet"} when the file is absent — safe to call
+    before running eval so the dashboard always has something to render.
+    """
+    if not _EVAL_SUMMARY_PATH.exists():
+        return {"status": "no eval run yet"}
+    try:
+        return json.loads(_EVAL_SUMMARY_PATH.read_text())
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"failed to read eval summary: {exc}") from exc
 
 
 # ── Debug endpoint: retrieve similar past conflicts ───────────────────────────

@@ -69,3 +69,8 @@ class ResolveResponse(BaseModel):
     neighbors: list[RetrievedNeighbor] = []
     ai_rationale: Optional[str] = None
     ai_confidence: Optional[float] = None
+    # Graceful no-key handling: resolved=False when AI path needed but unavailable.
+    # Retrieval (keyless) still runs; neighbors are populated even without a key.
+    resolved: bool = True
+    ai_unavailable: bool = False
+    ai_unavailable_reason: Optional[str] = None

@@ -207,6 +207,40 @@ async def resolve_conflict(
                             conflict=conflict_detail,
                             use_rag=use_rag,
                         )
+
+                        if suggestion is None:
+                            # No API key — partial response: retrieval ran, AI did not.
+                            # Return early; TemporaryDirectory cleans up on context exit.
+                            partial_neighbors = [
+                                RetrievedNeighbor(
+                                    file_path=n.file_path,
+                                    language=n.language,
+                                    resolution_kind=n.resolution_kind,
+                                    similarity=n.rrf_score,
+                                    resolved_content_preview=n.resolved_content[:200],
+                                )
+                                for n in neighbors
+                            ]
+                            return ResolveResponse(
+                                merge_id=merge_id,
+                                file_path=file_path,
+                                resolved_content="",
+                                via="ai",
+                                audit_ref=None,
+                                conflict=conflict_detail,
+                                used_rag=use_rag,
+                                neighbors=partial_neighbors,
+                                ai_rationale=None,
+                                ai_confidence=None,
+                                resolved=False,
+                                ai_unavailable=True,
+                                ai_unavailable_reason=(
+                                    "No API key configured — AI suggestion unavailable. "
+                                    "Set GEMINI_API_KEY to enable the generation path. "
+                                    "Retrieval already ran; see neighbors."
+                                ),
+                            )
+
                         ai_rationale = suggestion.rationale
                         ai_confidence = suggestion.confidence
                         suggestion_neighbors = neighbors

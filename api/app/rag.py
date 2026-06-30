@@ -23,7 +23,12 @@ async def produce_suggestion(
     conflict,
     use_rag: bool,
     client=None,
-) -> tuple[Suggestion, list[Neighbor]]:
+) -> tuple[Suggestion | None, list[Neighbor]]:
+    """
+    Returns (None, neighbors) when generation fails due to a missing API key —
+    the caller must build a partial ResolveResponse (resolved=False, ai_unavailable=True).
+    Retrieval always runs before generation, so neighbors is populated even on no-key.
+    """
     """
     Produce an LLM-generated resolution for conflict.
 
@@ -66,5 +71,14 @@ async def produce_suggestion(
             logger.warning("retrieval failed, degrading to baseline: %s", exc)
             neighbors = []
 
-    suggestion = await _gen.generate_resolution(conflict, neighbors, client=client)
+    try:
+        suggestion = await _gen.generate_resolution(conflict, neighbors, client=client)
+    except RuntimeError as exc:
+        reason = str(exc)
+        if "not set" in reason:
+            # No API key configured — return None so caller can build partial response.
+            # neighbors may already be populated from keyless retrieval above.
+            logger.warning("generation unavailable (no key): %s", reason)
+            return None, neighbors
+        raise
     return suggestion, neighbors
