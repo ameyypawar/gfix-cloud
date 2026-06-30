@@ -163,6 +163,27 @@ _llm_and_gfix_present = pytest.mark.skipif(
 )
 
 
+@gfix_present
+async def test_resolve_floor_resolvable_end_to_end():
+    """Non-overlapping docstring edits to separate functions → git auto-merges.
+
+    No ANTHROPIC_API_KEY required: git resolves the conflict before mergiraf/LLM
+    are invoked.  Proves the keyless deterministic-floor path stays green.
+    """
+    with open(SAMPLE_DIR / "floor_resolvable.json") as f:
+        req = json.load(f)
+
+    response = await resolve_conflict(**req)
+
+    assert isinstance(response, ResolveResponse)
+    assert response.resolved_content.strip(), "resolved_content must not be empty"
+    # Both docstrings must survive the auto-merge
+    assert '"""Add two numbers."""' in response.resolved_content
+    assert '"""Multiply two numbers."""' in response.resolved_content
+    assert response.via == "git_automerge"
+    assert response.used_rag is False
+
+
 @_llm_and_gfix_present
 async def test_resolve_overlap_python_end_to_end():
     """Overlap fixture: both sides change same line → mergiraf fails → ours placeholder."""

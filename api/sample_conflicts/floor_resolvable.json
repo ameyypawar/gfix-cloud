@@ -1,0 +1,6 @@
+{
+  "base": "def add(x, y):\n    return x + y\n\ndef multiply(x, y):\n    return x * y\n",
+  "ours": "def add(x, y):\n    \"\"\"Add two numbers.\"\"\"\n    return x + y\n\ndef multiply(x, y):\n    return x * y\n",
+  "theirs": "def add(x, y):\n    return x + y\n\ndef multiply(x, y):\n    \"\"\"Multiply two numbers.\"\"\"\n    return x * y\n",
+  "file_path": "math_ops.py"
+}
