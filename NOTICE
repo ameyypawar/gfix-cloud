@@ -1,0 +1,28 @@
+gfix-cloud
+Copyright (c) 2026 Amey Pawar
+
+gfix-cloud itself is licensed under the MIT License (see LICENSE).
+
+This software bundles or invokes the following third-party components:
+
+--------------------------------------------------------------------------
+mergiraf
+--------------------------------------------------------------------------
+License:    GNU General Public License v3.0 (GPL-3.0)
+Source:     https://codeberg.org/mergiraf/mergiraf
+
+mergiraf is fetched as a prebuilt, unmodified binary at Docker image build
+time (see api/Dockerfile) and invoked exclusively as a separate subprocess
+by gfix's own `gitfix_conflict_resolve {kind: mergiraf}` tool call. It is
+never linked against, vendored, or modified as part of gfix-cloud's own
+source code. See docs/adr/0004-mergiraf-subprocess-boundary.md for the
+license-boundary rationale.
+
+--------------------------------------------------------------------------
+gfix
+--------------------------------------------------------------------------
+Source:     https://github.com/ameyypawar/gfix (releases)
+
+The `gfix` binary is fetched from GitHub Releases at Docker image build
+time and invoked as a subprocess (`gfix mcp`) via the Model Context
+Protocol. gfix is a separate project from gfix-cloud.
