@@ -1,0 +1,9 @@
+# web-local exclusions (build context is project root; see root .dockerignore
+# for the exclusions that actually apply to `docker build -f web/Dockerfile .`)
+node_modules/
+.next/
+.turbo/
+__pycache__/
+*.pyc
+.venv/
+.git/

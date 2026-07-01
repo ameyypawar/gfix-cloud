@@ -1,0 +1,26 @@
+# Build-context exclusions (used by both api/Dockerfile and web/Dockerfile
+# since both use context: . — project root)
+
+# Node
+web/node_modules/
+web/.next/
+web/.turbo/
+
+# Python
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/.venv/
+api/tests/
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Docs / planning artefacts (not needed in any image)
+docs/
+*.md
+plan-gfix-cloud.md
+research-findings.md
+engine-interface.md

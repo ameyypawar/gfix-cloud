@@ -1,34 +1,78 @@
-# docker-compose.yml
+# docker-compose.yml — Phase 6a: one-command full-stack demo
 #
-# Phase 2: real db service added.
-# Phase 6 will wire up the api + web services + seed.
+# Quick start (keyless):
+#   docker compose up
 #
-# Quick start (db only):
-#   docker compose up -d db
+# With Gemini key (enables AI generation path):
+#   GEMINI_API_KEY=<key> docker compose up
 #
-# Then run the API locally:
-#   cd api && DATABASE_URL=postgresql://postgres:postgres@localhost:5432/gfixcloud \
-#            uvicorn app.main:app --port 8080
+# Services:
+#   db    — pgvector/pgvector:pg16
+#   api   — 3-stage image (gfix + mergiraf binaries + bge-small-en-v1.5 baked in)
+#   seed  — one-shot: loads eval/golden_set.jsonl into past_resolutions
+#   web   — Next.js 16 standalone dashboard
 
 services:
+
   db:
     image: pgvector/pgvector:pg16
     environment:
+      POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: gfixcloud
-      POSTGRES_USER: postgres
     ports:
       - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "postgres", "-d", "gfixcloud"]
       interval: 5s
       timeout: 5s
       retries: 12
 
-  # api and web stubs — see Phase 6 for Dockerfiles
-  # api:
-  #   build: ./api
-  #   ...
-  # web:
-  #   build: ./web
-  #   ...
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/gfixcloud
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      CORS_ORIGINS: http://localhost:3000
+      GITFIX_ALLOW_ANY_REPO: "1"
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+
+  seed:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    command: python3 -m app.seed
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/gfixcloud
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: "no"
+
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8080
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:

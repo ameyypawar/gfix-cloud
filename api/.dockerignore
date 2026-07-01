@@ -1,0 +1,11 @@
+# api-local exclusions (build context is project root; see root .dockerignore
+# for the exclusions that actually apply to `docker build -f api/Dockerfile .`)
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+tests/
+node_modules/
+.next/
+.git/
